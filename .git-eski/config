@@ -1,0 +1,13 @@
+[core]
+	repositoryformatversion = 0
+	filemode = false
+	bare = false
+	logallrefupdates = true
+	symlinks = false
+	ignorecase = true
+[remote "origin"]
+	url = https://github.com/ftmotiondesign/ftmotion-card-test.git
+	fetch = +refs/heads/feature/admin-business-switch-20261021:refs/remotes/origin/feature/admin-business-switch-20261021
+[branch "main"]
+	remote = origin
+	merge = refs/heads/feature/admin-business-switch-20261021
