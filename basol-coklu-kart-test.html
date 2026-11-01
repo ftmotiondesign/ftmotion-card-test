@@ -6,25 +6,30 @@
 <div class="panel"><h2>Kişiler ve QR Kodları</h2><div id="persons"></div></div>
 <div class="panel"><h2>Firma Listesi</h2><div id="firms"></div></div>
 <p class="muted"><a href="qr-yonetimi.html">← Mevcut test QR yönetimine dön</a></p>
-</main><script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script><script>
-const $=x=>document.getElementById(x), key='basol-person-firm-demo-v1';
-const initial={persons:[],firms:[{id:'basol-yapi',name:'Başol Yapı',url:'https://ftmotion.com/qr/basol-yapi'},{id:'ozgul-fast-food',name:'Özgül Fast Food',url:''},{id:'istanbul-apart',name:'İstanbul Apart',url:''}]};
-let state;try{state=JSON.parse(localStorage.getItem(key))||initial}catch(e){state=initial}
-function save(){localStorage.setItem(key,JSON.stringify(state));render()}
-function slug(s){return s.toLocaleLowerCase('tr').replace(/ı/g,'i').replace(/ğ/g,'g').replace(/ü/g,'u').replace(/ş/g,'s').replace(/ö/g,'o').replace(/ç/g,'c').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}
-function el(tag,text){let n=document.createElement(tag);if(text!==undefined)n.textContent=text;return n}
-function btn(label,cb){let b=el('button',label);b.className='secondary';b.onclick=cb;return b}
-function personUrl(p){return new URL('basol-kisi-kart-test.html?id='+encodeURIComponent(p.id),location.href).href}
-function render(){let people=$('persons'),firms=$('firms');people.replaceChildren();firms.replaceChildren();
-for(const p of state.persons){let wrap=el('div');wrap.className='item';wrap.id='person-'+p.id;wrap.append(el('strong',p.name),el('p','Cep: '+(p.phone||'—')+' · WhatsApp: '+(p.wa||'—')+' · E-posta: '+(p.email||'—')));
-wrap.append(el('p','⚠ QR yalnızca kayıt yapılan tarayıcıda açılır. Farklı telefon için kalıcı kayıt henüz hazır değil.'));let link=el('a',personUrl(p));link.href=personUrl(p);link.target='_blank';wrap.append(link);
-let qr=el('div');qr.className='qr';wrap.append(qr);if(window.QRCode)new QRCode(qr,{text:personUrl(p),width:150,height:150});else wrap.append(el('p','QR kitaplığı yüklenemedi'));
-let selector=el('select');let empty=el('option','Firmayı seç');empty.value='';selector.append(empty);for(const f of state.firms){let o=el('option',f.name);o.value=f.id;selector.append(o)}
-let add=btn('Kişiye Firma Bağla',()=>{if(!selector.value)return alert('Firma seçin');p.firms=p.firms||[];if(!p.firms.includes(selector.value))p.firms.push(selector.value);save()});wrap.append(selector,add);
-for(const id of p.firms||[]){let f=state.firms.find(x=>x.id===id);if(f){let line=el('div','✓ '+f.name+' ');line.append(btn('Kaldır',()=>{p.firms=p.firms.filter(x=>x!==id);save()}));wrap.append(line)}}
-wrap.append(btn('Kişiyi Düzenle',()=>{let name=prompt('Ad Soyad',p.name);if(name===null||!name.trim())return;p.name=name.trim();p.phone=prompt('Cep',p.phone||'')??p.phone;p.wa=prompt('WhatsApp',p.wa||'')??p.wa;p.email=prompt('E-posta',p.email||'')??p.email;save()}));people.append(wrap)}
-if(!state.persons.length)people.append(el('p','Henüz kişi eklenmedi.'));
-for(const f of state.firms){let line=el('div');line.className='item';line.append(el('strong',f.name),el('p',f.url||'Kart bağlantısı henüz eklenmedi'));line.append(btn('Düzenle',()=>{let name=prompt('Firma adı',f.name);if(name===null||!name.trim())return;f.name=name.trim();f.url=prompt('Firma kartı bağlantısı',f.url||'')??f.url;save()}));firms.append(line)}}
-$('addPerson').onclick=()=>{let name=$('personName').value.trim();if(!name)return alert('Ad soyad yazın');let id=slug(name);if(!id||state.persons.some(x=>x.id===id)){alert('Bu kişi zaten kayıtlı. Aşağıdaki Kişiyi Düzenle butonunu kullanın.');document.getElementById('person-'+id)?.scrollIntoView({behavior:'smooth',block:'center'});return}state.persons.push({id,name,phone:$('personPhone').value.trim(),wa:$('personWa').value.trim(),email:$('personEmail').value.trim(),firms:[]});['personName','personPhone','personWa','personEmail'].forEach(x=>$(x).value='');save()};
-$('addFirm').onclick=()=>{let name=$('firmName').value.trim();if(!name)return alert('Firma adı yazın');let id=slug(name);if(state.firms.some(x=>x.id===id))return alert('Firma zaten var');let url=$('firmUrl').value.trim();if(url&&!/^https:\/\//i.test(url))return alert('Bağlantı https:// ile başlamalı');state.firms.push({id,name,url});$('firmName').value='';$('firmUrl').value='';save()};render();
+</main><script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script><script type="module">
+import {client,currentUser} from './shared/supabase-client.js';
+const $=id=>document.getElementById(id), db=await client();
+let user=null,people=[];
+const firms=[{name:'Başol Yapı',url:'https://ftmotion.com/qr/basol-yapi'},{name:'Özgül Fast Food',url:''},{name:'İstanbul Apart',url:''}];
+const slug=s=>s.toLocaleLowerCase('tr').replace(/ı/g,'i').replace(/ğ/g,'g').replace(/ü/g,'u').replace(/ş/g,'s').replace(/ö/g,'o').replace(/ç/g,'c').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+const el=(t,v)=>{let e=document.createElement(t);if(v!==undefined)e.textContent=v;return e};
+const btn=(label,fn)=>{let e=el('button',label);e.className='secondary';e.onclick=fn;return e};
+const url=p=>new URL('basol-kisi-kart-test.html?id='+encodeURIComponent(p.slug),location.href).href;
+const alertError=e=>alert(e?.message||String(e));
+async function refresh(){let {data,error}=await db.from('ft_person_cards_pilot').select('*').eq('owner_id',user.id).order('created_at');if(error)return alertError(error);people=data||[];render()}
+async function update(p,patch){let {error}=await db.from('ft_person_cards_pilot').update(patch).eq('id',p.id).eq('owner_id',user.id);if(error)return alertError(error);await refresh()}
+function render(){let root=$('persons');root.replaceChildren();for(let p of people){let wrap=el('div');wrap.className='item';wrap.id='person-'+p.slug;wrap.append(el('strong',p.full_name),el('p','Cep: '+(p.phone||'—')+' · WhatsApp: '+(p.whatsapp||'—')+' · E-posta: '+(p.email||'—')));
+let a=el('a',url(p));a.href=url(p);a.target='_blank';wrap.append(a);let qr=el('div');qr.className='qr';wrap.append(qr);if(window.QRCode)new QRCode(qr,{text:url(p),width:150,height:150});
+let selector=el('select');selector.append(el('option','Firmayı seç'));for(let f of firms){let o=el('option',f.name);o.value=f.name;selector.append(o)}
+wrap.append(selector,btn('Kişiye Firma Bağla',async()=>{let name=selector.value,f=firms.find(x=>x.name===name);if(!f)return alert('Firma seçin');if(!f.url)return alert('Önce firma kartının gerçek bağlantısını girin');let fs=[...(p.firms||[])];if(!fs.some(x=>x.name===f.name))fs.push(f);await update(p,{firms:fs})}));
+for(let f of p.firms||[]){let line=el('div','✓ '+f.name+' ');line.append(btn('Kaldır',()=>update(p,{firms:p.firms.filter(x=>x.name!==f.name)})));wrap.append(line)}
+wrap.append(btn('Kişiyi Düzenle',async()=>{let name=prompt('Ad Soyad',p.full_name);if(!name?.trim())return;let phone=prompt('Cep',p.phone||'');if(phone===null)return;let whatsapp=prompt('WhatsApp',p.whatsapp||'');if(whatsapp===null)return;let email=prompt('E-posta',p.email||'');if(email===null)return;await update(p,{full_name:name.trim(),phone,whatsapp,email})}));root.append(wrap)}
+if(!people.length)root.append(el('p','Henüz kişi eklenmedi.'));
+let fl=$('firms');fl.replaceChildren();for(let f of firms){let line=el('div',f.name+' · '+(f.url||'Bağlantı yok'));fl.append(line)}
+}
+$('addPerson').onclick=async()=>{let name=$('personName').value.trim();if(!name)return alert('Ad soyad yazın');let id=slug(name);if(people.some(p=>p.slug===id)){alert('Bu kişi kayıtlı. Aşağıdan Kişiyi Düzenle seçin.');$('person-'+id)?.scrollIntoView();return}
+let {error}=await db.from('ft_person_cards_pilot').insert({owner_id:user.id,slug:id,full_name:name,phone:$('personPhone').value.trim(),whatsapp:$('personWa').value.trim(),email:$('personEmail').value.trim()});if(error)return alertError(error);['personName','personPhone','personWa','personEmail'].forEach(x=>$(x).value='');await refresh()};
+$('addFirm').onclick=()=>{let name=$('firmName').value.trim(),url=$('firmUrl').value.trim();if(!name||!/^https:\/\//.test(url))return alert('Firma adı ve https:// bağlantısı gerekli');if(!firms.some(f=>f.name===name))firms.push({name,url});else firms.find(f=>f.name===name).url=url;render();alert('Firma bağlantısı bu oturumda hazır. Kişiye bağladığınızda kalıcı kaydedilir.')};
+user=await currentUser(db);
+if(!user){document.querySelector('main').innerHTML='<h2>Oturum açmanız gerekiyor</h2><p>Kalıcı kişi kartları için FTMotion hesabınızla giriş yapın.</p><a href="giris.html">Giriş Yap</a>'}else{document.querySelector('main > .muted').textContent='Kalıcı Supabase test kaydı. Canlı işletme kartları değiştirilmez. Eski tarayıcı kayıtları otomatik aktarılmaz.';await refresh()}
 </script></body></html>
